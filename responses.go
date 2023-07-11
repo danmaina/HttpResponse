@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"github.com/danmaina/logger"
 	"net/http"
 )
 
@@ -23,7 +23,7 @@ func ReturnResponse(status int, err error, body interface{}, res http.ResponseWr
 // returnResponses :- in json format
 func (res Response) returnResponse(w http.ResponseWriter) error {
 
-	log.Println("Setting the Response Header to json")
+	logger.INFO("Setting the Response Header to json")
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(res.Status)
 
@@ -31,34 +31,34 @@ func (res Response) returnResponse(w http.ResponseWriter) error {
 	var errE error
 
 	if res.Error != nil {
-		log.Println("Returning Error Body: ", res.Error)
+		logger.ERR("Returning Error Body: ", res.Error)
 		errE = json.NewEncoder(w).Encode(map[string]string{
 			"error": res.Error.Error(),
 		})
 	} else {
-		log.Println("Returning Response Body")
+		logger.DEBUG("Creating a new Json Encoder")
 		errE = json.NewEncoder(w).Encode(res.Body)
 	}
 
 	if errE != nil {
-		log.Println("Got An Error while encoding the Response Body: ", errE)
+		logger.ERR("Error while encoding the Response Body: ", errE)
 
-		log.Println("Trying to Marshal the Response Body.")
+		logger.DEBUG("Trying to Marshal the Response Body.")
 
 		mbArr, errM := json.Marshal(res)
 
 		if errM != nil {
-			log.Println("Got an Error while Marshalling the Response Body: ", errM)
+			logger.ERR("Error while Marshalling the Response Body: ", errM)
 			return errM
 		}
 
 		wRes, errW := w.Write(mbArr)
 		if errW != nil {
-			log.Println("Got an error while sending back the Marshaled Response Body: ", errW)
+			logger.ERR("Error while sending back the Marshaled Response Body: ", errW)
 			return errW
 		}
 
-		log.Println("Returned the Marshaled Response Body Successfully. Id: ", wRes)
+		logger.INFO("Generated the Marshaled JSON Response Body Successfully. Id: ", wRes)
 	}
 
 	return nil
