@@ -12,8 +12,16 @@ type Response struct {
 	Body   interface{} `json:"body"`
 }
 
-// Return Responses in json format
-func (res Response) ReturnResponse(w http.ResponseWriter) error {
+func ReturnResponse(status int, err error, body interface{}, res http.ResponseWriter) {
+	_ = Response{
+		Status: status,
+		Error:  err,
+		Body:   body,
+	}.returnResponse(res)
+}
+
+// returnResponses :- in json format
+func (res Response) returnResponse(w http.ResponseWriter) error {
 
 	log.Println("Setting the Response Header to json")
 	w.Header().Set("Content-Type", "application/json")
