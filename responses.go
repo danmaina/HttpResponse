@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -322,6 +323,26 @@ func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
 	return lrw.ResponseWriter.Write(b)
 }
 
+// generateTitle converts an endpoint like /api/v1/organizations/countries into "Organizations Countries"
+func generateTitle(method, urlPath string) string {
+	segments := strings.Split(urlPath, "/")
+	var words []string
+	
+	for _, s := range segments {
+		if s == "" || s == "api" || s == "v1" || len(s) > 30 {
+			continue
+		}
+		// Skip if it's a number
+		if _, err := strconv.Atoi(s); err == nil {
+			continue
+		}
+		words = append(words, strings.Title(strings.ToLower(s)))
+	}
+	
+	methodTitle := strings.Title(strings.ToLower(method))
+	return fmt.Sprintf("%s %s", methodTitle, strings.Join(words, " "))
+}
+
 // PayloadLoggingMiddleware logs incoming request and outgoing response payloads.
 func PayloadLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -333,7 +354,14 @@ func PayloadLoggingMiddleware(next http.Handler) http.Handler {
 			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 		}
 
-		logger.INFO(fmt.Sprintf("--> %s %s | Headers: %v | Request Payload: %s", r.Method, r.URL.Path, r.Header, string(reqBody)))
+		title := generateTitle(r.Method, r.URL.Path)
+
+		reqLogData := map[string]interface{}{
+			"headers": r.Header,
+			"payload": string(reqBody),
+		}
+		reqJSON, _ := json.MarshalIndent(reqLogData, "", "  ")
+		logger.INFO(fmt.Sprintf("\n%s Request:\n\n%s\n", title, string(reqJSON)))
 
 		lrw := &loggingResponseWriter{
 			ResponseWriter: w,
@@ -344,7 +372,14 @@ func PayloadLoggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(lrw, r)
 
 		duration := time.Since(startTime)
-		logger.INFO(fmt.Sprintf("<-- %d %s %s | Duration: %s | Response Payload: %s", lrw.statusCode, r.Method, r.URL.Path, duration, lrw.body.String()))
+		
+		resLogData := map[string]interface{}{
+			"statusCode": lrw.statusCode,
+			"duration":   duration.String(),
+			"payload":    lrw.body.String(),
+		}
+		resJSON, _ := json.MarshalIndent(resLogData, "", "  ")
+		logger.INFO(fmt.Sprintf("\n%s Response:\n\n%s\n", title, string(resJSON)))
 	})
 }
 
