@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/danmaina/logger/v2"
 )
@@ -302,3 +304,47 @@ func marshalXML(v interface{}) ([]byte, error) {
 	}
 	return escBuf.Bytes(), nil
 }
+
+// loggingResponseWriter captures the response body for logging.
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	body       *bytes.Buffer
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
+
+func (lrw *loggingResponseWriter) Write(b []byte) (int, error) {
+	lrw.body.Write(b)
+	return lrw.ResponseWriter.Write(b)
+}
+
+// PayloadLoggingMiddleware logs incoming request and outgoing response payloads.
+func PayloadLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startTime := time.Now()
+		reqBody := []byte{}
+		if r.Body != nil {
+			reqBody, _ = io.ReadAll(r.Body)
+			// Restore the io.ReadCloser to its original state
+			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
+		}
+
+		logger.INFO(fmt.Sprintf("--> %s %s | Headers: %v | Request Payload: %s", r.Method, r.URL.Path, r.Header, string(reqBody)))
+
+		lrw := &loggingResponseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+			body:           bytes.NewBuffer(nil),
+		}
+
+		next.ServeHTTP(lrw, r)
+
+		duration := time.Since(startTime)
+		logger.INFO(fmt.Sprintf("<-- %d %s %s | Duration: %s | Response Payload: %s", lrw.statusCode, r.Method, r.URL.Path, duration, lrw.body.String()))
+	})
+}
+
